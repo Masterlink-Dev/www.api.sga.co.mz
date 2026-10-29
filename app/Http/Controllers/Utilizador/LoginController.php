@@ -21,11 +21,14 @@ class LoginController extends Controller
         User::TIPO_SUPER_ADMIN => 'superadmin', // equipa MeuAcesso: /superadmin
     ];
 
+    // canal: "app" quando o pedido vem da app móvel — aí só entram cidadãos (tipo 0).
+    // O portal web não envia canal (ou envia "portal") e continua a aceitar todos os tipos.
     public function login(Request $request): JsonResponse
     {
         $dados = $request->validate([
             'login'    => ['required', 'string'], // e-mail ou telefone
             'password' => ['required', 'string'],
+            'canal'    => ['nullable', 'in:app,portal'],
         ]);
 
         // Se tiver "@" é e-mail, senão é telefone ("84 123 4567" → "+258841234567")
@@ -58,6 +61,16 @@ class LoginController extends Controller
             $this->registar($request, $user, 'login_falhado', false, $valor, 'conta_' . $user->estado);
 
             return response()->json(['mensagem' => 'A sua conta não está activa.'], 403);
+        }
+
+        // A app móvel é só para cidadãos: funcionários e administradores usam o portal web
+        if (($dados['canal'] ?? null) === 'app' && (int) $user->tipo !== User::TIPO_UTILIZADOR) {
+            $this->registar($request, $user, 'login_falhado', false, $valor, 'conta_nao_e_da_app');
+
+            return response()->json([
+                'codigo'   => 'SO_PORTAL',
+                'mensagem' => 'Esta conta é do portal MeuAcesso. A app é só para cidadãos: entre pelo portal web.',
+            ], 403);
         }
 
         $token = $user->createToken('meuacesso')->plainTextToken;

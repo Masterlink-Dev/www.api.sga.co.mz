@@ -106,7 +106,7 @@ class VisitaController extends Controller
             'observacoes'  => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $conta = User::where('numero', $this->soDigitos($dados['numero']))->where('tipo', 0)->first();
+        $conta = User::where('numero', $this->codigo($dados['numero']))->where('tipo', 0)->first();
         if (! $conta) {
             return response()->json(['mensagem' => 'Cidadão não encontrado.'], 404);
         }
@@ -277,7 +277,7 @@ class VisitaController extends Controller
         if (! empty($dados['visita'])) {
             $consulta->where('uuid', $dados['visita']);
         } else {
-            $conta = User::where('numero', $this->soDigitos($dados['numero']))->where('tipo', 0)->first();
+            $conta = User::where('numero', $this->codigo($dados['numero']))->where('tipo', 0)->first();
             $cidadaoId = $conta ? DB::table('cidadaos')->where('user_id', $conta->id)->value('id') : null;
             $consulta->where('cidadao_id', $cidadaoId ?? 0);
         }

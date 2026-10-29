@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 // Colaboradores (co-adjuntos) do super administrador principal.
-// Nascem com a senha inicial 00000000 e recebem o email das credenciais, como os administradores.
+// Nascem com uma senha inicial gerada (4 algarismos) e recebem o email das credenciais, como os administradores.
 class ColaboradorController extends Controller
 {
     // GET /superadmin/colaboradores → os colaboradores que ESTE super administrador registou
@@ -59,11 +59,11 @@ class ColaboradorController extends Controller
         }
 
         $super = $request->user();
-        $colaborador = Credenciais::criarConta($dados['email'], User::TIPO_SUPER_ADMIN, $super, $dados['nome'], [
+        [$colaborador, $senha] = Credenciais::criarConta($dados['email'], User::TIPO_SUPER_ADMIN, $super, $dados['nome'], [
             'colaborador' => true,
             'telefone'    => $telefone,
         ]);
-        $enviado = Credenciais::enviar($colaborador, $super);
+        $enviado = Credenciais::enviar($colaborador, $super, $senha);
 
         DB::table('registos_auditoria')->insert([
             'user_id'       => $super->id,
@@ -81,6 +81,7 @@ class ColaboradorController extends Controller
                 ? 'Colaborador registado. As credenciais foram enviadas por email.'
                 : 'Colaborador registado, mas não foi possível enviar o email. Indique-lhe a senha inicial.',
             'email_enviado' => $enviado,
+            'senha_gerada'  => Credenciais::paraTeste($senha), // só com MOSTRAR_SENHA_GERADA=true
             'colaborador'   => $this->formatar($colaborador->fresh()),
         ], 201);
     }

@@ -6,15 +6,20 @@ use App\Http\Controllers\Utilizador\LoginController;
 use App\Http\Controllers\Utilizador\SenhaController;
 use App\Http\Controllers\Utilizador\DocumentoController;
 use App\Http\Controllers\Utilizador\HistoricoController;
+use App\Http\Controllers\Utilizador\AvaliacaoController;
+use App\Http\Controllers\Utilizador\PerfilController;
+use App\Http\Controllers\SuporteController;
 use App\Http\Controllers\Secretaria\CidadaoController;
 use App\Http\Controllers\Secretaria\VisitaController;
 use App\Http\Controllers\Secretaria\VisitanteController;
 use App\Http\Controllers\Secretaria\ColegaController;
 use App\Http\Controllers\Secretaria\RelatorioController;
 use App\Http\Controllers\SuperAdmin\AdministradorController;
+use App\Http\Controllers\SuperAdmin\AvaliacaoController as SuperAvaliacaoController;
 use App\Http\Controllers\SuperAdmin\ColaboradorController;
 use App\Http\Controllers\SuperAdmin\InstituicaoController as SuperInstituicaoController;
 use App\Http\Controllers\SuperAdmin\PainelController as SuperPainelController;
+use App\Http\Controllers\SuperAdmin\SuporteController as SuperSuporteController;
 use App\Http\Controllers\Admin\CampoController;
 use App\Http\Controllers\Admin\EquipaController;
 use App\Http\Controllers\Admin\InstituicaoController as AdminInstituicaoController;
@@ -44,9 +49,14 @@ use App\Http\Controllers\Admin\SectorController;
 // Registo de um utilizador da app (tipo 0)  { nome, email, telefone, password, password_confirmation }
 Route::post('/registro', [RegistroController::class, 'register']);
 
-// Login de qualquer tipo de conta  { login: email ou telefone, password }
+// Login de qualquer tipo de conta  { login: email ou telefone, password, canal?: app | portal }
+// Com canal = "app" (app móvel) só entram cidadãos (tipo 0); as outras contas recebem 403 SO_PORTAL.
 // → { utilizador: { token, tipo, deve_alterar_senha, ... } }  (o "tipo" decide a área no portal)
 Route::post('/login', [LoginController::class, 'login']);
+
+// Ecrã "Suporte" da app: contactos da empresa e perguntas frequentes (o super administrador muda-os)
+//   → { contactos: { empresa, telefone, whatsapp, email, morada, horario, site }, perguntas: [ { id, categoria, pergunta, resposta } ] }
+Route::get('/suporte', [SuporteController::class, 'index']);
 
 
 // ---------------------------------------------------------------------------------------------
@@ -63,22 +73,38 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Mudar a senha (qualquer conta)  { password, password_confirmation, senha_actual }
     // Com a senha inicial (deve_alterar_senha = true) não pede senha_actual. É a única rota que
-    // funciona enquanto a senha for 00000000 (não passa pelo middleware senha.alterada).
-    // Regras: mín. 8 caracteres, maiúscula, minúscula, número e diferente de 00000000.
+    // funciona enquanto a senha for a inicial (não passa pelo middleware senha.alterada).
+    // Regras: mín. 8 caracteres, maiúscula, minúscula, número e diferente da actual.
     Route::put('/senha', [SenhaController::class, 'alterar']);
 
     // ----- Utilizador da app (tipo 0) ------------------------------------------------------
+    // Só cidadãos: funcionários e administradores recebem 403 SEM_PERMISSAO (eles usam o portal web).
+    // O login da app também recusa outras contas (POST /login com canal = "app").
+    Route::middleware('tipo:0')->group(function () {
+        // O cidadão envia e vê os seus documentos (BI frente/verso e fotografia)
+        Route::get('/documentos', [DocumentoController::class, 'index']);
+        Route::post('/documentos', [DocumentoController::class, 'store']);
+        Route::post('/documentos/{tipo}', [DocumentoController::class, 'substituir']) // trocar uma só imagem
+            ->whereIn('tipo', ['frente', 'verso', 'foto']);
 
-    // O cidadão envia e vê os seus documentos (BI frente/verso e fotografia)
-    Route::get('/documentos', [DocumentoController::class, 'index']);
-    Route::post('/documentos', [DocumentoController::class, 'store']);
-    Route::post('/documentos/{tipo}', [DocumentoController::class, 'substituir']) // trocar uma só imagem
-        ->whereIn('tipo', ['frente', 'verso', 'foto']);
+        // O cidadão vê as suas visitas
+        Route::get('/visitas', [HistoricoController::class, 'index']);
+        Route::get('/visitas/instituicoes', [HistoricoController::class, 'instituicoes']); // os locais por onde passou
+        Route::get('/visitas/{uuid}', [HistoricoController::class, 'show'])->whereUuid('uuid'); // uma visita em detalhe
 
-    // O cidadão vê as suas visitas
-    Route::get('/visitas', [HistoricoController::class, 'index']);
-    Route::get('/visitas/instituicoes', [HistoricoController::class, 'instituicoes']); // os locais por onde passou
-    Route::get('/visitas/{uuid}', [HistoricoController::class, 'show'])->whereUuid('uuid'); // uma visita em detalhe
+        // Ecrã "Minha conta": o cidadão edita os seus dados  { nome, email, telefone }
+        //   → { mensagem, utilizador: { uuid, numero, nome, email, telefone, tipo } }  (a senha muda-se em PUT /senha)
+        Route::put('/perfil', [PerfilController::class, 'update']);
+
+        // O cidadão avalia a app (vai para o super administrador) e vê a resposta da equipa
+        //   POST { estrelas: 1-5, comentario?, plataforma?, app_versao? } → 201 { mensagem, id }
+        //   GET /respostas → { respostas: [ { id, estrelas, comentario, resposta, respondido_em, vista_em, expira_em } ] }
+        //                    (só as por ver e as vistas há menos de 1 h)
+        //   POST /{id}/vista → marca a resposta como vista; desaparece da app 1 h depois
+        Route::post('/avaliacoes', [AvaliacaoController::class, 'store']);
+        Route::get('/avaliacoes/respostas', [AvaliacaoController::class, 'respostas']);
+        Route::post('/avaliacoes/{id}/vista', [AvaliacaoController::class, 'vista'])->whereNumber('id');
+    });
 
     // ----- Secretaria / recepção (tipo 1; o controller também aceita o tipo 2) --------------
     Route::prefix('secretaria')->group(function () {
@@ -89,7 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Tudo o resto só depois de mudar a senha inicial (403 SENHA_INICIAL)
         Route::middleware('senha.alterada')->group(function () {
             Route::put('/perfil', [VisitaController::class, 'atualizarPerfil']);   // o funcionário edita o seu perfil
-            Route::get('/cidadaos/{numero}', [CidadaoController::class, 'show']);  // procura pelo número de 4 dígitos
+            Route::get('/cidadaos/{numero}', [CidadaoController::class, 'show']);  // procura pelo código MeuAcesso (ex.: 2A7341)
             Route::post('/visitas', [VisitaController::class, 'entrada']);         // registar entrada (código/QR)
             Route::post('/visitas/manual', [VisitaController::class, 'entradaManual']); // sem conta na app (BI físico)
             Route::post('/saida', [VisitaController::class, 'saida']);             // registar saída
@@ -110,12 +136,16 @@ Route::middleware('auth:sanctum')->group(function () {
             //   POST { nome, email, bi?, cargo?, justificacao? } → 201 { id, estado: 'pendente' }
             Route::get('/colegas', [ColegaController::class, 'index'])->middleware('tipo:1');
             Route::post('/colegas', [ColegaController::class, 'store'])->middleware('tipo:1');
+
+            // Colegas activos da mesma instituição (só leitura)
+            //   GET → { data: [ { id, nome, email, perfil, ultimo_acesso, eu } ] }
+            Route::get('/equipa', [ColegaController::class, 'equipa'])->middleware('tipo:1');
         });
     });
 
     // ------------------------------------------------------------------------------------------
     // FLUXO  Super administrador → Administrador → (equipa)
-    //   1. O Super administrador cria o acesso do administrador: só o email. Senha inicial 00000000
+    //   1. O Super administrador cria o acesso do administrador: só o email. Senha inicial de 4 algarismos, gerada ao acaso
     //      e um único email com as credenciais.
     //   2. O administrador entra. Enquanto a senha for a inicial, TODAS as rotas do ambiente
     //      respondem 403 SENHA_INICIAL (middleware senha.alterada); só PUT /senha funciona.
@@ -141,10 +171,31 @@ Route::middleware('auth:sanctum')->group(function () {
         // Instituições registadas pelos administradores (só consulta) ?q=texto&estado=activa|suspensa
         Route::get('/instituicoes', [SuperInstituicaoController::class, 'index']);
 
+        // Avaliações da app (feedback dos cidadãos sobre a plataforma)
+        //   GET ?estado=por_responder|respondidas&estrelas=1-5&q=texto
+        //       → { data: [ { id, nome, email, codigo, estrelas, comentario, criado_em, resposta, respondido_em, respondido_por, vista_em } ],
+        //           paginacao, resumo: { total, media, por_estrela, por_responder } }
+        //   POST /{id}/responder { resposta } → uma só resposta (409 se já foi respondida)
+        Route::get('/avaliacoes', [SuperAvaliacaoController::class, 'index']);
+        Route::post('/avaliacoes/{id}/responder', [SuperAvaliacaoController::class, 'responder'])->whereNumber('id');
+
+        // Suporte da app: contactos da empresa, perguntas frequentes e termos. Tudo devolve { contactos, perguntas, termos }
+        //   PUT  /contactos { empresa, telefone, whatsapp?, email?, morada?, horario?, site? }
+        //   POST /termos (multipart "ficheiro": PDF até 10 MB) → substitui os termos e condições anteriores
+        //   POST /perguntas { pergunta, resposta, categoria?, activo? } · PUT /perguntas/{id} (os mesmos, opcionais)
+        //   POST /perguntas/{id}/mover { direccao: cima|baixo } · DELETE /perguntas/{id}
+        Route::get('/suporte', [SuperSuporteController::class, 'index']);
+        Route::put('/suporte/contactos', [SuperSuporteController::class, 'contactos']);
+        Route::post('/suporte/termos', [SuperSuporteController::class, 'termos']);
+        Route::post('/suporte/perguntas', [SuperSuporteController::class, 'criar']);
+        Route::put('/suporte/perguntas/{id}', [SuperSuporteController::class, 'actualizar'])->whereNumber('id');
+        Route::post('/suporte/perguntas/{id}/mover', [SuperSuporteController::class, 'mover'])->whereNumber('id');
+        Route::delete('/suporte/perguntas/{id}', [SuperSuporteController::class, 'remover'])->whereNumber('id');
+
         // Administradores (ecrãs "Credenciais" e "Registar administrador")
         //   GET  ?q=texto&senha=inicial|alterada → { data: [...], resumo: { total, senha_inicial, por_registar } }
         //   POST { email } → 201 { mensagem, email_enviado, administrador }  (envia o email das credenciais)
-        //   POST .../redefinir-senha → a senha volta a 00000000 e é obrigatório mudá-la (não envia email)
+        //   POST .../redefinir-senha → gera uma senha inicial nova (devolvida em senha_gerada) e é obrigatório mudá-la (não envia email)
         // {uuid} = o "id" que a lista devolve
         Route::get('/administradores', [AdministradorController::class, 'index']);
         Route::post('/administradores', [AdministradorController::class, 'store']);
@@ -152,7 +203,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Colaboradores (co-adjuntos): só o super administrador principal (403 SO_PRINCIPAL para os colaboradores)
         //   GET  → { data: [ { id, nome, email, contacto, senha: inicial|alterada, estado, ultimo_acesso, criado_em } ] }
-        //   POST { nome, email, contacto } → 201 { mensagem, email_enviado, colaborador }  (senha inicial 00000000)
+        //   POST { nome, email, contacto } → 201 { mensagem, email_enviado, colaborador }  (senha inicial gerada; senha_gerada só com MOSTRAR_SENHA_GERADA=true)
         Route::middleware('super.principal')->group(function () {
             Route::get('/colaboradores', [ColaboradorController::class, 'index']);
             Route::post('/colaboradores', [ColaboradorController::class, 'store']);

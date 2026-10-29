@@ -58,14 +58,14 @@ class EquipaController extends Controller
         $admin = $request->user();
         $funcao = $dados['perfil'] ?? 'Secretária';
 
-        $user = DB::transaction(function () use ($dados, $admin, $inst, $funcao) {
-            $user = Credenciais::criarConta($dados['email'], User::TIPO_FUNCIONARIO, $admin, $dados['nome']);
+        [$user, $senha] = DB::transaction(function () use ($dados, $admin, $inst, $funcao) {
+            [$user, $senha] = Credenciais::criarConta($dados['email'], User::TIPO_FUNCIONARIO, $admin, $dados['nome']);
             $this->ligarAInstituicao($user, $inst->id, $funcao, $admin, 'administrador');
 
-            return $user;
+            return [$user, $senha];
         });
 
-        $enviado = Credenciais::enviar($user, $admin);
+        $enviado = Credenciais::enviar($user, $admin, $senha);
         $this->auditar($request, 'registar_funcionario', $inst->id, User::class, $user->id, $user->email);
 
         return response()->json([
@@ -73,6 +73,7 @@ class EquipaController extends Controller
                 ? 'Funcionário registado. As credenciais foram enviadas por email.'
                 : 'Funcionário registado, mas não foi possível enviar o email. Indique-lhe a senha inicial.',
             'email_enviado' => $enviado,
+            'senha_gerada'  => Credenciais::paraTeste($senha), // só com MOSTRAR_SENHA_GERADA=true
             'pessoa'        => $this->formatar($this->consulta($inst->id)->where('u.id', $user->id)->first()),
         ], 201);
     }

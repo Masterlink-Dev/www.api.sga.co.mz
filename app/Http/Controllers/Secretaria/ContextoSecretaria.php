@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Secretaria;
 
+use App\Support\CodigoMeuAcesso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -33,9 +34,9 @@ trait ContextoSecretaria
         return $funcionario;
     }
 
-    // Só os dígitos: aceita "4829", "4 829" ou "4829 "
-    protected function soDigitos(string $numero): string
+    // Código MeuAcesso limpo: aceita "2A7341", "2a7 341" ou o texto do QR "MEUACESSO:2A7341"
+    protected function codigo(string $numero): string
     {
-        return preg_replace('/\D+/', '', $numero);
+        return CodigoMeuAcesso::normalizar($numero);
     }
 }

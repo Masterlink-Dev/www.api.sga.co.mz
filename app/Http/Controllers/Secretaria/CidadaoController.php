@@ -18,7 +18,7 @@ class CidadaoController extends Controller
     {
         $func = $this->funcionario($request);
 
-        $conta = User::where('numero', $this->soDigitos($numero))->where('tipo', 0)->first();
+        $conta = User::where('numero', $this->codigo($numero))->where('tipo', 0)->first();
 
         if (! $conta) {
             return response()->json(['mensagem' => 'Cidadão não encontrado.'], 404);

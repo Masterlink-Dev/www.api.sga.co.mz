@@ -57,6 +57,10 @@ return [
     // Endereço do portal web (vai no email das credenciais)
     'portal_url' => env('PORTAL_URL', 'http://localhost:5173'),
 
+    // Só para testes: as respostas que criam contas trazem a senha inicial gerada (senha_gerada),
+    // para o portal a mostrar. Em produção fica false e a senha só vai no email.
+    'mostrar_senha_gerada' => (bool) env('MOSTRAR_SENHA_GERADA', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

@@ -38,6 +38,31 @@ class ColegaController extends Controller
         return response()->json(['data' => $lista]);
     }
 
+    // GET /secretaria/equipa → os colegas activos da instituição (o funcionário vê, não altera)
+    public function equipa(Request $request): JsonResponse
+    {
+        $func = $this->funcionario($request);
+        $eu = $request->user()->id;
+
+        $lista = DB::table('funcionarios as f')
+            ->join('users as u', 'u.id', '=', 'f.user_id')
+            ->where('f.instituicao_id', $func->instituicao_id)
+            ->where('f.estado', 'activo')
+            ->whereNull('f.deleted_at')->whereNull('u.deleted_at')
+            ->orderBy('u.name')
+            ->get(['u.id as user_id', 'u.uuid', 'u.name', 'u.email', 'f.cargo', 'u.ultimo_acesso_em'])
+            ->map(fn ($l) => [
+                'id'            => $l->uuid,
+                'nome'          => $l->name,
+                'email'         => $l->email,
+                'perfil'        => $l->cargo ?? 'Funcionária',
+                'ultimo_acesso' => $l->ultimo_acesso_em,
+                'eu'            => (int) $l->user_id === (int) $eu,
+            ]);
+
+        return response()->json(['data' => $lista]);
+    }
+
     // POST /secretaria/colegas  { nome, email, bi?, cargo?, justificacao? }
     public function store(Request $request): JsonResponse
     {

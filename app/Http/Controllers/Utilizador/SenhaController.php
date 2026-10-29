@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 // Mudar a senha — igual para todas as contas (super administrador, administrador, funcionário e app).
-// No primeiro acesso (senha inicial 00000000) não pede a senha actual: a pessoa acabou de entrar com ela.
+// No primeiro acesso (senha inicial de 4 algarismos) não pede a senha actual: a pessoa acabou de entrar com ela.
 class SenhaController extends Controller
 {
     public function alterar(Request $request): JsonResponse
@@ -21,14 +21,13 @@ class SenhaController extends Controller
         $dados = $request->validate([
             'senha_actual' => [$inicial ? 'nullable' : 'required', 'string'],
             // As mesmas regras que o portal mostra na janela "Defina a sua senha"
-            'password'     => ['required', 'string', 'min:8', 'regex:/[a-z]/', 'regex:/[A-Z]/', 'regex:/\d/', 'confirmed', 'not_in:' . User::SENHA_INICIAL],
+            'password'     => ['required', 'string', 'min:8', 'regex:/[a-z]/', 'regex:/[A-Z]/', 'regex:/\d/', 'confirmed'],
         ], [
             'senha_actual.required' => 'Escreva a senha actual.',
             'password.required'     => 'Escreva a nova senha.',
             'password.min'          => 'A nova senha tem de ter pelo menos 8 caracteres.',
             'password.regex'        => 'A nova senha tem de ter letra maiúscula, letra minúscula e número.',
             'password.confirmed'    => 'As duas senhas não são iguais.',
-            'password.not_in'       => 'A nova senha tem de ser diferente da senha inicial.',
         ]);
 
         if (! $inicial && ! Hash::check($dados['senha_actual'], $user->password)) {

@@ -59,8 +59,8 @@ class AdministradorController extends Controller
         ]);
 
         $super = $request->user();
-        $admin = Credenciais::criarConta($dados['email'], User::TIPO_ADMIN, $super);
-        $enviado = Credenciais::enviar($admin, $super);
+        [$admin, $senha] = Credenciais::criarConta($dados['email'], User::TIPO_ADMIN, $super);
+        $enviado = Credenciais::enviar($admin, $super, $senha);
 
         $this->auditar($request, 'criar_administrador', $admin);
 
@@ -69,11 +69,13 @@ class AdministradorController extends Controller
                 ? 'Administrador registado. As credenciais foram enviadas por email.'
                 : 'Administrador registado, mas não foi possível enviar o email. Indique-lhe a senha inicial.',
             'email_enviado' => $enviado,
+            'senha_gerada'  => Credenciais::paraTeste($senha), // só com MOSTRAR_SENHA_GERADA=true
             'administrador' => $this->formatar($this->consulta()->where('u.id', $admin->id)->first()),
         ], 201);
     }
 
-    // A senha volta a ser 00000000 e o administrador tem de a mudar no próximo acesso (sem email)
+    // Gera uma senha inicial nova (4 algarismos) e o administrador tem de a mudar no próximo acesso.
+    // Não envia email: a resposta traz a senha para o Super administrador a passar ao administrador.
     public function redefinirSenha(Request $request, string $uuid): JsonResponse
     {
         $admin = User::where('uuid', $uuid)->where('tipo', User::TIPO_ADMIN)->first();
@@ -81,12 +83,13 @@ class AdministradorController extends Controller
             return response()->json(['mensagem' => 'Administrador não encontrado.'], 404);
         }
 
-        Credenciais::repor($admin);
+        $senha = Credenciais::repor($admin);
 
         $this->auditar($request, 'redefinir_senha_administrador', $admin);
 
         return response()->json([
-            'mensagem'      => 'A senha voltou a ser ' . User::SENHA_INICIAL . '. No próximo acesso terá de a mudar.',
+            'mensagem'      => "A nova senha temporária é {$senha}. No próximo acesso terá de a mudar.",
+            'senha_gerada'  => $senha,
             'administrador' => $this->formatar($this->consulta()->where('u.id', $admin->id)->first()),
         ]);
     }

@@ -54,8 +54,8 @@ class PedidoController extends Controller
         $admin = $request->user();
         $funcao = array_key_exists($pedido->cargo, EquipaController::FUNCOES) ? $pedido->cargo : 'Funcionária';
 
-        $user = DB::transaction(function () use ($pedido, $admin, $inst, $funcao) {
-            $user = Credenciais::criarConta(mb_strtolower($pedido->email), User::TIPO_FUNCIONARIO, $admin, $pedido->nome);
+        [$user, $senha] = DB::transaction(function () use ($pedido, $admin, $inst, $funcao) {
+            [$user, $senha] = Credenciais::criarConta(mb_strtolower($pedido->email), User::TIPO_FUNCIONARIO, $admin, $pedido->nome);
             $funcionarioId = app(EquipaController::class)->ligarAInstituicao($user, $inst->id, $funcao, $admin, 'pedido_colega');
             DB::table('funcionarios')->where('id', $funcionarioId)->update(['documento_numero' => $pedido->documento_numero]);
 
@@ -64,15 +64,16 @@ class PedidoController extends Controller
                 'funcionario_id' => $funcionarioId, 'updated_at' => now(),
             ]);
 
-            return $user;
+            return [$user, $senha];
         });
 
-        $enviado = Credenciais::enviar($user, $admin);
+        $enviado = Credenciais::enviar($user, $admin, $senha);
         $this->auditar($request, 'aprovar_pedido_funcionario', $inst->id, 'pedidos_funcionario', $pedido->id, $pedido->email);
 
         return response()->json([
             'mensagem'      => "{$pedido->nome} já faz parte da equipa.",
             'email_enviado' => $enviado,
+            'senha_gerada'  => Credenciais::paraTeste($senha), // só com MOSTRAR_SENHA_GERADA=true
             'pessoa'        => ['id' => $user->uuid, 'nome' => $user->name, 'email' => $user->email],
         ]);
     }

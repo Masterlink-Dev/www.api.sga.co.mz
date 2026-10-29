@@ -14,7 +14,8 @@ class CredenciaisAcesso extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public User $user) {}
+    // $senha: a senha inicial gerada para esta conta (em claro só aqui, nunca guardada)
+    public function __construct(public User $user, public string $senha) {}
 
     public function envelope(): Envelope
     {
@@ -28,7 +29,7 @@ class CredenciaisAcesso extends Mailable
             with: [
                 'portal' => config('app.portal_url'),
                 'email'  => $this->user->email,
-                'senha'  => User::SENHA_INICIAL,
+                'senha'  => $this->senha,
                 'papel'  => match ($this->user->tipo) {
                     User::TIPO_SUPER_ADMIN => 'colaborador da equipa MeuAcesso',
                     User::TIPO_ADMIN       => 'administrador',

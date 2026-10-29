@@ -12,10 +12,5 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(DadosBaseSeeder::class);
-
-        // Instituição e secretaria de teste, só em ambiente local
-        if (app()->isLocal()) {
-            $this->call(SecretariaDemoSeeder::class);
-        }
     }
 }

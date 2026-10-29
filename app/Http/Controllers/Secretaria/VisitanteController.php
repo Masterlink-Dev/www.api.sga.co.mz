@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Secretaria;
 use App\Http\Controllers\Controller;
 use App\Models\Cidadao;
 use App\Services\LeitorBI;
+use App\Support\CodigoMeuAcesso;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,11 +52,11 @@ class VisitanteController extends Controller
         // Procurar por nome, nº do BI ou código MeuAcesso
         if (! empty($f['q'])) {
             $q = $f['q'];
-            $codigo = $this->soDigitos($q);
+            $codigo = $this->codigo($q);
             $grupos->where(function ($w) use ($q, $codigo) {
                 $w->where('v.nome_visitante', 'like', '%'.$q.'%')
                   ->orWhere('v.documento_numero', 'like', '%'.$q.'%');
-                if ($codigo !== '') {
+                if (strlen($codigo) === CodigoMeuAcesso::TAMANHO) {
                     $w->orWhere('u.numero', $codigo);
                 }
             });

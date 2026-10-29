@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-// Enquanto a conta tiver a senha inicial (00000000), nada do ambiente fica disponível:
+// Enquanto a conta tiver a senha inicial (4 algarismos gerados), nada do ambiente fica disponível:
 // a única coisa possível é mudar a senha (PUT /senha, que fica fora deste filtro).
 // O portal usa o código SENHA_INICIAL para mostrar a janela obrigatória de mudança de senha.
 class SenhaAlterada
